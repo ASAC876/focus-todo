@@ -676,8 +676,47 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  // Supabase Realtime
+  let realtimeRef = 0;
+
+  function setupRealtime() {
+    const ws = new WebSocket('wss://pgfvmtufnplckypyazqp.supabase.co/realtime/v1/websocket?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZnZtdHVmbnBsY2t5cHlhenFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NzMyMDYsImV4cCI6MjA4NzM0OTIwNn0.Hvbz6SXp__9ggTXVXYqPDe9vhlBa0St7LoNdP9pkmcg&vsn=1.0.0');
+
+    ws.onopen = () => {
+      realtimeRef++;
+      ws.send(JSON.stringify({
+        topic: 'realtime:public:tasks',
+        event: 'phx_join',
+        payload: {
+          config: {
+            postgres_changes: [{ event: '*', schema: 'public', table: 'tasks' }]
+          }
+        },
+        ref: String(realtimeRef)
+      }));
+    };
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'postgres_changes') {
+        loadTasks();
+      }
+    };
+
+    ws.onclose = () => {
+      setTimeout(setupRealtime, 3000);
+    };
+
+    setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        realtimeRef++;
+        ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(realtimeRef) }));
+      }
+    }, 20000);
+  }
+
   loadTasks();
-  setInterval(() => { loadTasks(); }, 60000);
+  setupRealtime();
 </script>
 <script>
   if ('serviceWorker' in navigator) {
