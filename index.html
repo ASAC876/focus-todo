@@ -2,8 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FOCUS">
+<meta name="theme-color" content="#0f0f0f">
 <title>FOCUS — タスク管理</title>
+<link rel="manifest" href="manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -434,14 +439,29 @@
 </main>
 
 <script>
-  let tasks = JSON.parse(localStorage.getItem('focus-tasks') || '[]');
+  const SUPABASE_URL = 'https://pgfvmtufnplckypyazqp.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZnZtdHVmbnBsY2t5cHlhenFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NzMyMDYsImV4cCI6MjA4NzM0OTIwNn0.Hvbz6SXp__9ggTXVXYqPDe9vhlBa0St7LoNdP9pkmcg';
+  const HEADERS = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  };
+
+  let tasks = [];
   let currentFilter = 'all';
 
   const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
   const priorityLabel = { urgent: '緊急', high: '高', medium: '中', low: '低' };
 
-  function save() {
-    localStorage.setItem('focus-tasks', JSON.stringify(tasks));
+  async function loadTasks() {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/tasks?order=id.asc', { headers: HEADERS });
+    tasks = await res.json();
+    render();
+  }
+
+  async function save() {
+    // no-op: each operation calls Supabase directly
   }
 
   function today() {
@@ -476,39 +496,45 @@
     return label;
   }
 
-  function addTask() {
+  async function addTask() {
     const input = document.getElementById('task-input');
     const title = input.value.trim();
     if (!title) { input.focus(); return; }
     const priority = document.getElementById('priority-select').value;
     const date = document.getElementById('date-input').value;
-    tasks.push({
-      id: Date.now(),
-      title,
-      priority,
-      date,
-      done: false,
-      created: today()
+    const res = await fetch(SUPABASE_URL + '/rest/v1/tasks', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ title, priority, date, done: false, created: today() })
     });
+    const rows = await res.json();
+    tasks.push(rows[0]);
     input.value = '';
     document.getElementById('date-input').value = '';
-    save();
     render();
     input.focus();
   }
 
-  document.getElementById('task-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') addTask();
-  });
 
-  function toggleDone(id) {
+
+  async function toggleDone(id) {
     const t = tasks.find(t => t.id === id);
-    if (t) { t.done = !t.done; save(); render(); }
+    if (!t) return;
+    t.done = !t.done;
+    await fetch(SUPABASE_URL + '/rest/v1/tasks?id=eq.' + id, {
+      method: 'PATCH',
+      headers: HEADERS,
+      body: JSON.stringify({ done: t.done })
+    });
+    render();
   }
 
-  function deleteTask(id) {
+  async function deleteTask(id) {
     tasks = tasks.filter(t => t.id !== id);
-    save();
+    await fetch(SUPABASE_URL + '/rest/v1/tasks?id=eq.' + id, {
+      method: 'DELETE',
+      headers: HEADERS
+    });
     render();
   }
 
@@ -588,28 +614,75 @@
     doneList.innerHTML = done.map(t => taskHTML(t)).join('');
   }
 
+  async function cyclePriority(id) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    const order = ['urgent', 'high', 'medium', 'low'];
+    const idx = order.indexOf(t.priority);
+    t.priority = order[(idx + 1) % order.length];
+    await fetch(SUPABASE_URL + '/rest/v1/tasks?id=eq.' + id, {
+      method: 'PATCH',
+      headers: HEADERS,
+      body: JSON.stringify({ priority: t.priority })
+    });
+    render();
+  }
+
+  async function setDate(id, val) {
+    const t = tasks.find(t => t.id === id);
+    if (!t) return;
+    t.date = val || '';
+    await fetch(SUPABASE_URL + '/rest/v1/tasks?id=eq.' + id, {
+      method: 'PATCH',
+      headers: HEADERS,
+      body: JSON.stringify({ date: t.date })
+    });
+    render();
+  }
+
+  function openDatePicker(id) {
+    const el = document.getElementById('date-picker-' + id);
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.opacity = '1';
+    el.style.pointerEvents = 'auto';
+    el.focus();
+    el.click();
+    el.addEventListener('blur', () => { el.style.display = 'none'; }, { once: true });
+  }
+
   function taskHTML(t) {
     const s = t.date ? dateStatus(t.date) : null;
     const dateClass = s === 'overdue' ? 'overdue' : s === 'today' ? 'today' : s === 'soon' ? 'soon' : '';
-    return `<div class="task-item p-${t.priority} ${t.done ? 'done' : ''}">
-      <div class="task-check ${t.done ? 'checked' : ''}" onclick="toggleDone(${t.id})"></div>
-      <div class="task-body">
-        <div class="task-title">${escapeHtml(t.title)}</div>
-        <div class="task-meta">
-          <span class="task-priority p-${t.priority}">${priorityLabel[t.priority]}</span>
-          ${t.date ? `<span class="task-date ${dateClass}">${formatDate(t.date)}</span>` : ''}
-        </div>
-      </div>
-      <button class="task-delete" onclick="deleteTask(${t.id})">×</button>
-    </div>`;
+    const dateSpan = t.date
+      ? '<span class="task-date ' + dateClass + '" onclick="openDatePicker(' + t.id + ')" title="クリックで変更" style="cursor:pointer;">' + formatDate(t.date) + '</span>'
+      : '<span class="task-date" onclick="openDatePicker(' + t.id + ')" title="期限を設定" style="cursor:pointer;color:var(--muted);">＋ 期限</span>';
+    const html = '<div class="task-item p-' + t.priority + ' ' + (t.done ? 'done' : '') + '" style="position:relative;">'
+      + '<div class="task-check ' + (t.done ? 'checked' : '') + '" onclick="toggleDone(' + t.id + ')"></div>'
+      + '<div class="task-body">'
+      + '<div class="task-title">' + escapeHtml(t.title) + '</div>'
+      + '<div class="task-meta">'
+      + '<span class="task-priority p-' + t.priority + '" onclick="cyclePriority(' + t.id + ')" title="クリックで変更" style="cursor:pointer;user-select:none;">' + priorityLabel[t.priority] + ' ↻</span>'
+      + dateSpan
+      + '<input type="date" id="date-picker-' + t.id + '" value="' + (t.date || '') + '" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;" onchange="setDate(' + t.id + ', this.value)">'
+      + '</div>'
+      + '</div>'
+      + '<button class="task-delete" onclick="deleteTask(' + t.id + ')">×</button>'
+      + '</div>';
+    return html;
   }
 
   function escapeHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  render();
-  setInterval(() => render(), 60000); // refresh date every minute
+  loadTasks();
+  setInterval(() => { loadTasks(); }, 60000);
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
 </script>
 </body>
 </html>
