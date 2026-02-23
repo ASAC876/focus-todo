@@ -722,9 +722,12 @@
   let realtimeRef = 0;
 
   function setupRealtime() {
-    const ws = new WebSocket('wss://pgfvmtufnplckypyazqp.supabase.co/realtime/v1/websocket?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZnZtdHVmbnBsY2t5cHlhenFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NzMyMDYsImV4cCI6MjA4NzM0OTIwNn0.Hvbz6SXp__9ggTXVXYqPDe9vhlBa0St7LoNdP9pkmcg&vsn=1.0.0');
+    console.log('setupRealtime called, user:', currentUser ? currentUser.email : 'none');
+    const wsUrl = 'wss://pgfvmtufnplckypyazqp.supabase.co/realtime/v1/websocket?apikey=' + SUPABASE_KEY + '&vsn=1.0.0';
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      console.log('WebSocket connected');
       realtimeRef++;
       ws.send(JSON.stringify({
         topic: 'realtime:public:tasks',
@@ -740,13 +743,20 @@
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
+      console.log('WS message:', msg.event);
       if (msg.event === 'postgres_changes') {
+        console.log('DB change detected, reloading tasks');
         loadTasks();
       }
     };
 
     ws.onclose = () => {
+      console.log('WebSocket closed, reconnecting...');
       setTimeout(setupRealtime, 3000);
+    };
+
+    ws.onerror = (e) => {
+      console.error('WebSocket error:', e);
     };
 
     setInterval(() => {
