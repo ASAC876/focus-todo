@@ -779,6 +779,7 @@
       accessToken = data.access_token;
       currentUser = data.user;
       localStorage.setItem('focus-token', accessToken);
+      localStorage.setItem('focus-refresh', data.refresh_token || '');
       localStorage.setItem('focus-user', JSON.stringify(currentUser));
       showApp();
       loadTasks();
@@ -799,6 +800,7 @@
       accessToken = data.access_token;
       currentUser = data.user;
       localStorage.setItem('focus-token', accessToken);
+      localStorage.setItem('focus-refresh', data.refresh_token || '');
       localStorage.setItem('focus-user', JSON.stringify(currentUser));
       showApp();
       loadTasks();
@@ -808,10 +810,31 @@
     }
   }
 
+  async function refreshToken() {
+    const refreshTk = localStorage.getItem('focus-refresh');
+    if (!refreshTk) { signOut(); return; }
+    const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshTk })
+    });
+    const data = await res.json();
+    if (data.access_token) {
+      accessToken = data.access_token;
+      localStorage.setItem('focus-token', accessToken);
+      localStorage.setItem('focus-refresh', data.refresh_token || refreshTk);
+      console.log('Token refreshed');
+    } else {
+      console.log('Token refresh failed, signing out');
+      signOut();
+    }
+  }
+
   function signOut() {
     accessToken = SUPABASE_KEY;
     currentUser = null;
     localStorage.removeItem('focus-token');
+    localStorage.removeItem('focus-refresh');
     localStorage.removeItem('focus-user');
     showAuth();
   }
@@ -834,8 +857,9 @@
     accessToken = savedToken;
     currentUser = JSON.parse(savedUser);
     showApp();
-    loadTasks();
-    setupRealtime();
+    refreshToken().then(() => { loadTasks(); setupRealtime(); });
+    // 50分ごとにトークンを自動更新
+    setInterval(refreshToken, 50 * 60 * 1000);
   } else {
     showAuth();
   }
