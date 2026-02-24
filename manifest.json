@@ -1,21 +1,9 @@
 {
   "name": "FOCUS — タスク管理",
   "short_name": "FOCUS",
-  "start_url": "./todo-app.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f0f0f",
   "theme_color": "#0f0f0f",
-  "description": "シンプルで使いやすいタスク管理アプリ",
-  "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "description": "シンプルで使いやすいタスク管理アプリ"
 }
