@@ -720,11 +720,14 @@
 
   // Supabase Realtime
   let realtimeRef = 0;
+  let activeWs = null;
 
   function setupRealtime() {
+    if (activeWs && activeWs.readyState === WebSocket.OPEN) return;
     console.log('setupRealtime called, user:', currentUser ? currentUser.email : 'none');
     const wsUrl = 'wss://pgfvmtufnplckypyazqp.supabase.co/realtime/v1/websocket?apikey=' + SUPABASE_KEY + '&vsn=1.0.0';
     const ws = new WebSocket(wsUrl);
+    activeWs = ws;
 
     ws.onopen = () => {
       console.log('WebSocket connected');
@@ -743,7 +746,6 @@
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
-      console.log('WS message:', msg.event);
       if (msg.event === 'postgres_changes') {
         console.log('DB change detected, reloading tasks');
         loadTasks();
@@ -751,12 +753,15 @@
     };
 
     ws.onclose = () => {
-      console.log('WebSocket closed, reconnecting...');
-      setTimeout(setupRealtime, 3000);
+      if (ws === activeWs) {
+        console.log('WebSocket closed, reconnecting...');
+        activeWs = null;
+        setTimeout(setupRealtime, 5000);
+      }
     };
 
-    ws.onerror = (e) => {
-      console.error('WebSocket error:', e);
+    ws.onerror = () => {
+      ws.close();
     };
 
     setInterval(() => {
@@ -764,7 +769,7 @@
         realtimeRef++;
         ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(realtimeRef) }));
       }
-    }, 20000);
+    }, 25000);
   }
 
   // Auth
