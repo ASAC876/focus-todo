@@ -403,7 +403,7 @@
       2. パスワードを入力<br>
       3. 「ログイン」ボタンを押す<br>
       <div style="color:#e8ff47;font-size:11px;font-family:'DM Mono',monospace;letter-spacing:1px;margin-top:12px;margin-bottom:6px;">パスワードを忘れた場合</div>
-      現在パスワードリセット機能はありません。<br>登録したメールアドレスを添えて<br>管理者までご連絡ください。<br><a href='mailto:focus@yah00.co.jp' style='color:#e8ff47;'>focus@yah00.co.jp</a>
+      現在パスワードリセット機能はありません。<br>登録したメールアドレスを添えて<br>管理者までご連絡ください。<br><a href='mailto:focus@yahoo.co.jp' style='color:#e8ff47;'>focus@yahoo.co.jp</a>
     </div>
   </div>
 </div>
@@ -854,6 +854,23 @@
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app-screen').style.display = 'none';
   }
+
+  // 画面表示時に自動リロード
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentUser) {
+      loadTasks();
+      if (!activeWs || activeWs.readyState !== WebSocket.OPEN) {
+        setupRealtime();
+      }
+    }
+  });
+
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted && currentUser) {
+      loadTasks();
+      setupRealtime();
+    }
+  });
 
   // 自動ログイン
   const savedToken = localStorage.getItem('focus-token');
